@@ -1,20 +1,107 @@
 package main
 
 import (
-	"fmt"
+	"math"
+	"time"
+
+	"github.com/ebitengine/oto/v3"
 )
 
-//TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.</p>
-func main() {
-	//TIP <p>Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined text
-	// to see how GoLand suggests fixing the warning.</p><p>Alternatively, if available, click the lightbulb to view possible fixes.</p>
-	s := "gopher"
-	fmt.Printf("Hello and welcome, %s!\n", s)
+const sampleRate = 44100
+const bufferSize = 4096
+const channels = 1
 
-	for i := 1; i <= 5; i++ {
-		//TIP <p>To start your debugging session, right-click your code in the editor and select the Debug option.</p> <p>We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-		// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.</p>
-		fmt.Println("i =", 100/i)
+// SinOscillator generates sinusoidal waveforms for audio synthesis.
+// It maintains phase information to produce continuous sine waves at a specified frequency.
+type SinOscillator struct {
+	// amplitude is the amplitude of the oscillator's waveform, between 0 and 1
+	amplitude float64
+	// frequency is the oscillator's frequency in Hz
+	frequency uint16
+	// angularFrequency is the oscillator's angular frequency in radians per second
+	angularFrequency float64
+	// phase is the current, internal phase angle in radians
+	phase float64
+	// phaseStep is the phase increment per oen sample, calculated as angular frequency / sample rate
+	phaseStep float64
+}
+
+func newSinOscillator(amplitude float64, frequency uint16) *SinOscillator {
+	if amplitude < 0 || 1 <= amplitude {
+		panic("amplitude must be between 0 and 1")
+	}
+
+	angFreq := angularFrequency(frequency)
+	return &SinOscillator{
+		amplitude:        amplitude,
+		frequency:        frequency,
+		angularFrequency: angFreq,
+		phase:            0,
+		phaseStep:        angFreq / float64(sampleRate),
+	}
+}
+
+// todo: test
+// angularFrequency converts frequency f [periods/second] into angular frequency [rad/second].
+// One full period (360 deg) is 2 PI rad.
+// Having 1Hz means one full period per second, so an angular frequency of 2 PI rad / second.
+// Higher frequency means more angular frequency to keep up.
+func angularFrequency(f uint16) float64 {
+	return 2 * math.Pi * float64(f)
+}
+
+// todo: test
+// todo: benchmark
+func (s *SinOscillator) next() float64 {
+	s.phase += s.phaseStep
+	if s.phase >= 2*math.Pi {
+		s.phase -= 2 * math.Pi
+	}
+	return s.amplitude * math.Sin(s.phase)
+}
+
+func (s *SinOscillator) nextSignedInt16() int16 {
+	return int16(math.Round(s.next() * math.MaxInt16))
+}
+
+func (s *SinOscillator) Read(p []byte) (n int, err error) {
+	pLength := len(p)
+	pIdx := 0
+	// while index of next element is smaller than the length e.g. (pIdx=4, pIdx+1=5, pLength=5)
+	for pIdx+1 < pLength {
+		sample := s.nextSignedInt16()
+		p[pIdx] = byte(sample)
+		p[pIdx+1] = byte(sample >> 8)
+		pIdx += 2
+	}
+	return pIdx, err
+}
+
+// 1 sample - 2 bytes (FormatSignedInt16LE)
+// 128B buffer - 64 samples
+func main() {
+	oscillator := newSinOscillator(0.2, 440)
+
+	ctxOptions := &oto.NewContextOptions{}
+	ctxOptions.SampleRate = sampleRate
+	ctxOptions.ChannelCount = channels
+	ctxOptions.Format = oto.FormatSignedInt16LE
+	//ctxOptions.BufferSize = 100 * time.Millisecond
+
+	otoCtx, readyChan, err := oto.NewContext(ctxOptions)
+	if err != nil {
+		panic("Creating oto context failed: " + err.Error())
+	}
+	// Wait for the hardware to be ready
+	<-readyChan
+
+	//
+	player := otoCtx.NewPlayer(oscillator)
+	player.SetBufferSize(bufferSize)
+	player.Play()
+
+	// We can wait for the sound to finish playing using something like this
+	for player.IsPlaying() {
+		time.Sleep(time.Millisecond)
 	}
 }
