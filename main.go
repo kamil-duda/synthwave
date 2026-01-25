@@ -8,7 +8,8 @@ import (
 )
 
 const sampleRate = 44100
-const bufferSize = 4096
+const bufferSizeSamples = 4096
+const hardwareBufferSize = 50 * time.Millisecond // length of the operating system buffer
 const channels = 1
 
 // SinOscillator generates sinusoidal waveforms for audio synthesis.
@@ -67,6 +68,7 @@ func (s *SinOscillator) nextSignedInt16() int16 {
 func (s *SinOscillator) Read(p []byte) (n int, err error) {
 	pLength := len(p)
 	pIdx := 0
+
 	// while index of next element is smaller than the length e.g. (pIdx=4, pIdx+1=5, pLength=5)
 	for pIdx+1 < pLength {
 		sample := s.nextSignedInt16()
@@ -86,7 +88,7 @@ func main() {
 	ctxOptions.SampleRate = sampleRate
 	ctxOptions.ChannelCount = channels
 	ctxOptions.Format = oto.FormatSignedInt16LE
-	//ctxOptions.BufferSize = 100 * time.Millisecond
+	ctxOptions.BufferSize = hardwareBufferSize
 
 	otoCtx, readyChan, err := oto.NewContext(ctxOptions)
 	if err != nil {
@@ -97,11 +99,14 @@ func main() {
 
 	//
 	player := otoCtx.NewPlayer(oscillator)
-	player.SetBufferSize(bufferSize)
+	player.SetBufferSize(bufferSizeSamples)
 	player.Play()
 
 	// We can wait for the sound to finish playing using something like this
 	for player.IsPlaying() {
-		time.Sleep(time.Millisecond)
+		if err := otoCtx.Err(); err != nil {
+			panic("oto error: " + err.Error())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
