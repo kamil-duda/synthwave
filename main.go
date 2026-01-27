@@ -79,8 +79,6 @@ func (s *SinOscillator) Read(p []byte) (n int, err error) {
 	return pIdx, err
 }
 
-// 1 sample - 2 bytes (FormatSignedInt16LE)
-// 128B buffer - 64 samples
 func main() {
 	oscillator := newSinOscillator(0.2, 440)
 
