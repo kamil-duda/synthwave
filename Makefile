@@ -36,4 +36,6 @@ coverage: ## Generate and open test coverage report
 	open coverage.html
 
 help: ## Show this help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@HELP_WIDTH=10; \
+	LINES=$$(grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST)); \
+	echo "$$LINES" | awk -v width=$$HELP_WIDTH 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-*s\033[0m %s\n", width, $$1, $$2}'
