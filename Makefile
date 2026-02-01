@@ -1,5 +1,8 @@
 .DEFAULT_GOAL := help
 
+# Enable Green Tea GC in Go 1.25 (default in 1.26)
+export GOEXPERIMENT=greenteagc
+
 mod: ## Run go mod tidy
 	go mod tidy
 
