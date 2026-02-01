@@ -7,14 +7,14 @@ import (
 	"github.com/ebitengine/oto/v3"
 )
 
-const sampleRate = 44100
-const bufferSizeSamples = 4096
+const samplingRate = 44100                       // 44.1 kHz
+const bufferSizeSamples = 4096                   // audio driver buffer size
 const hardwareBufferSize = 50 * time.Millisecond // length of the operating system buffer
-const channels = 1
+const channels = 1                               // 1 - mono, 2 - stereo
 
-// SinOscillator generates sinusoidal waveforms for audio synthesis.
+// SineOscillator generates sinusoidal waveforms for audio synthesis.
 // It maintains phase information to produce continuous sine waves at a specified frequency.
-type SinOscillator struct {
+type SineOscillator struct {
 	// amplitude is the amplitude of the oscillator's waveform, between 0 and 1
 	amplitude float64
 	// frequency is the oscillator's frequency in Hz
@@ -23,22 +23,22 @@ type SinOscillator struct {
 	angularFrequency float64
 	// phase is the current, internal phase angle in radians
 	phase float64
-	// phaseStep is the phase increment per oen sample, calculated as angular frequency / sample rate
+	// phaseStep is the phase increment per one sample, calculated as angular frequency / sample rate
 	phaseStep float64
 }
 
-func newSinOscillator(amplitude float64, frequency uint16) *SinOscillator {
+func newSinOscillator(amplitude float64, frequency uint16) *SineOscillator {
 	if amplitude < 0 || 1 <= amplitude {
 		panic("amplitude must be between 0 and 1")
 	}
 
 	angFreq := angularFrequency(frequency)
-	return &SinOscillator{
+	return &SineOscillator{
 		amplitude:        amplitude,
 		frequency:        frequency,
 		angularFrequency: angFreq,
 		phase:            0,
-		phaseStep:        angFreq / float64(sampleRate),
+		phaseStep:        angFreq / float64(samplingRate),
 	}
 }
 
@@ -53,7 +53,7 @@ func angularFrequency(f uint16) float64 {
 
 // todo: test
 // todo: benchmark
-func (s *SinOscillator) next() float64 {
+func (s *SineOscillator) next() float64 {
 	s.phase += s.phaseStep
 	if s.phase >= 2*math.Pi {
 		s.phase -= 2 * math.Pi
@@ -61,11 +61,11 @@ func (s *SinOscillator) next() float64 {
 	return s.amplitude * math.Sin(s.phase)
 }
 
-func (s *SinOscillator) nextSignedInt16() int16 {
+func (s *SineOscillator) nextSignedInt16() int16 {
 	return int16(math.Round(s.next() * math.MaxInt16))
 }
 
-func (s *SinOscillator) Read(p []byte) (n int, err error) {
+func (s *SineOscillator) Read(p []byte) (n int, err error) {
 	pLength := len(p)
 	pIdx := 0
 
@@ -83,7 +83,7 @@ func main() {
 	oscillator := newSinOscillator(0.2, 440)
 
 	ctxOptions := &oto.NewContextOptions{}
-	ctxOptions.SampleRate = sampleRate
+	ctxOptions.SampleRate = samplingRate
 	ctxOptions.ChannelCount = channels
 	ctxOptions.Format = oto.FormatSignedInt16LE
 	ctxOptions.BufferSize = hardwareBufferSize
@@ -95,12 +95,10 @@ func main() {
 	// Wait for the hardware to be ready
 	<-readyChan
 
-	//
 	player := otoCtx.NewPlayer(oscillator)
 	player.SetBufferSize(bufferSizeSamples)
 	player.Play()
 
-	// We can wait for the sound to finish playing using something like this
 	for player.IsPlaying() {
 		if err := otoCtx.Err(); err != nil {
 			panic("oto error: " + err.Error())
