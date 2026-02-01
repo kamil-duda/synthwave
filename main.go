@@ -54,11 +54,12 @@ func angularFrequency(f uint16) float64 {
 // todo: test
 // todo: benchmark
 func (s *SineOscillator) next() float64 {
+	value := s.amplitude * math.Sin(s.phase)
 	s.phase += s.phaseStep
 	if s.phase >= 2*math.Pi {
 		s.phase -= 2 * math.Pi
 	}
-	return s.amplitude * math.Sin(s.phase)
+	return value
 }
 
 func (s *SineOscillator) nextSignedInt16() int16 {
