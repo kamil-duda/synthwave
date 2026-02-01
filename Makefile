@@ -13,6 +13,9 @@ update: ## Update go mod dependencies
 run: ## Run the application
 	go run .
 
+run-gc-flags: ## Run the application with GC flags
+	go run -gcflags="-m -m" .
+
 test: ## Run unit tests
 	# -v (verbose)
 	# ./... (look for tests in all directories)
@@ -39,6 +42,6 @@ coverage: ## Generate and open test coverage report
 	open coverage.html
 
 help: ## Show this help message
-	@HELP_WIDTH=10; \
+	@HELP_WIDTH=12; \
 	LINES=$$(grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST)); \
 	echo "$$LINES" | awk -v width=$$HELP_WIDTH 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-*s\033[0m %s\n", width, $$1, $$2}'
