@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewSine_validation(t *testing.T) {
+func TestNewSquare_validation(t *testing.T) {
 	const (
 		amplitudeError    = "amplitude must be between 0 and 1"
 		frequencyError    = "frequency must be positive"
@@ -47,13 +47,13 @@ func TestNewSine_validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewSine(tt.amplitude, tt.frequency, tt.samplingRate)
+			_, err := NewSquare(tt.amplitude, tt.frequency, tt.samplingRate)
 			assert.ErrorContains(t, err, tt.expectedError)
 		})
 	}
 }
 
-func TestNewSine_boundaries(t *testing.T) {
+func TestNewSquare_boundaries(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
@@ -70,94 +70,72 @@ func TestNewSine_boundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(tt.amplitude, tt.frequency, tt.samplingRate)
+			osc, err := NewSquare(tt.amplitude, tt.frequency, tt.samplingRate)
 			assert.NoError(t, err)
 			assert.NotNil(t, osc)
 		})
 	}
 }
 
-func TestSine_Next(t *testing.T) {
+func TestSquare_Next(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
 		frequency    uint
 		samplingRate int
 	}{
-		{"full amplitude 100 Hz", 1, 100, 4_400},
-		{"half amplitude 100 Hz", 0.5, 100, 4_400},
-		{"zero amplitude", 0, 100, 4_400},
+		{"full amplitude 100 Hz", 1, 100, 4_410},
+		{"half amplitude 100 Hz", 0.5, 100, 4_410},
 		{"440 Hz at 44.1 kHz", 1, 440, 44_100},
+		{"just below Nyquist", 1, 22_049, 44_100},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(tt.amplitude, tt.frequency, tt.samplingRate)
+			osc, err := NewSquare(tt.amplitude, tt.frequency, tt.samplingRate)
 			require.NoError(t, err)
 
 			// three full periods, so the phase wraps around 2PI at least twice
 			samples := 3 * tt.samplingRate / int(tt.frequency)
 			for i := range samples {
-				expected := tt.amplitude * math.Sin(2*math.Pi*float64(tt.frequency)*float64(i)/float64(tt.samplingRate))
-				assert.InDelta(t, expected, osc.next(), 1e-9, "sample %d", i)
+				// Sample i lies (i*f mod samplingRate) / samplingRate of the way into its period and the first half is positive.
+				// Integer math keeps the expected sign exact. No case puts a sample exactly on an edge, except i = 0.
+				expected := tt.amplitude
+				if 2*(i*int(tt.frequency)%tt.samplingRate) >= tt.samplingRate {
+					expected = -tt.amplitude
+				}
+				assert.Equal(t, expected, osc.next(), "sample %d", i)
 			}
 		})
 	}
 }
 
-func TestSine_Next_phaseWrapping(t *testing.T) {
-	tests := []struct {
-		name         string
-		frequency    uint
-		samplingRate int
-	}{
-		{"440 Hz at 44.1 kHz", 440, 44_100},
-		{"just below Nyquist", 22_049, 44_100},
-	}
-
-	t.Parallel()
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			osc, err := NewSine(1, tt.frequency, tt.samplingRate)
-			require.NoError(t, err)
-			s := osc.(*sine)
-
-			for i := range tt.samplingRate {
-				s.next()
-				require.GreaterOrEqual(t, s.phase, 0.0, "sample %d", i)
-				require.Less(t, s.phase, 2*math.Pi, "sample %d", i)
-			}
-		})
-	}
-}
-
-func TestSine_NextSignedInt16(t *testing.T) {
+func TestSquare_NextSignedInt16(t *testing.T) {
 	tests := []struct {
 		name        string
 		amplitude   float64
 		sampleIndex int
 		expected    int16
 	}{
-		{"zero at start", 1, 0, 0},
-		{"rounds down", 1, 1, 4_663},
-		{"rounds up", 1, 3, 13_612},
-		{"positive peak", 1, 11, 32_767},
-		{"zero at half period", 1, 22, 0},
-		{"negative rounds away from zero", 1, 25, -13_612},
-		{"negative peak", 1, 33, -32_767},
-		{"quarter amplitude positive peak", 0.25, 11, 8_192},
-		{"quarter amplitude negative peak", 0.25, 33, -8_192},
-		{"zero amplitude", 0, 11, 0},
+		{"positive peak at start", 1, 0, 32_767},
+		{"last positive sample of the first period", 1, 22, 32_767},
+		{"first negative sample", 1, 23, -32_767},
+		{"last negative sample of the first period", 1, 44, -32_767},
+		{"positive again after the phase wraps", 1, 45, 32_767},
+		{"half amplitude rounds half away from zero", 0.5, 0, 16_384},
+		{"negative half amplitude rounds half away from zero", 0.5, 23, -16_384},
+		{"quarter amplitude rounds up", 0.25, 0, 8_192},
+		{"negative quarter amplitude rounds down", 0.25, 23, -8_192},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(tt.amplitude, 100, 4_400)
+			// 100 Hz at 4410 Hz is 44.1 samples per period: samples 0-22 are positive, 23-44 negative, 45 starts the next period
+			osc, err := NewSquare(tt.amplitude, 100, 4_410)
 			require.NoError(t, err)
 
 			for range tt.sampleIndex {
@@ -168,7 +146,7 @@ func TestSine_NextSignedInt16(t *testing.T) {
 	}
 }
 
-func TestSine_Read(t *testing.T) {
+func TestSquare_Read(t *testing.T) {
 	tests := []struct {
 		name         string
 		bufferLength int
@@ -184,9 +162,9 @@ func TestSine_Read(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(1, 440, 44_100)
+			osc, err := NewSquare(1, 440, 44_100)
 			require.NoError(t, err)
-			twin, err := NewSine(1, 440, 44_100)
+			twin, err := NewSquare(1, 440, 44_100)
 			require.NoError(t, err)
 
 			p := bytes.Repeat([]byte{0xAA}, tt.bufferLength)
@@ -206,24 +184,25 @@ func TestSine_Read(t *testing.T) {
 	}
 }
 
-func TestSine_Read_encoding(t *testing.T) {
+func TestSquare_Read_encoding(t *testing.T) {
 	tests := []struct {
 		name          string
+		amplitude     float64
 		sampleIndex   int
 		expectedBytes []byte
 	}{
-		{"zero", 0, []byte{0x00, 0x00}},
-		{"positive 13612 = 0x352C", 3, []byte{0x2C, 0x35}},
-		{"positive peak 32767 = 0x7FFF", 11, []byte{0xFF, 0x7F}},
-		{"negative -13612 = 0xCAD4 in two's complement", 25, []byte{0xD4, 0xCA}},
-		{"negative peak -32767 = 0x8001 in two's complement", 33, []byte{0x01, 0x80}},
+		{"positive peak 32767 = 0x7FFF", 1, 0, []byte{0xFF, 0x7F}},
+		{"negative peak -32767 = 0x8001 in two's complement", 1, 23, []byte{0x01, 0x80}},
+		{"quarter amplitude 8192 = 0x2000", 0.25, 0, []byte{0x00, 0x20}},
+		{"negative quarter amplitude -8192 = 0xE000 in two's complement", 0.25, 23, []byte{0x00, 0xE0}},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(1, 100, 4_400)
+			// 100 Hz at 4410 Hz: samples 0-22 are positive, 23-44 negative
+			osc, err := NewSquare(tt.amplitude, 100, 4_410)
 			require.NoError(t, err)
 
 			p := make([]byte, 2*(tt.sampleIndex+1))
@@ -234,7 +213,7 @@ func TestSine_Read_encoding(t *testing.T) {
 	}
 }
 
-func TestSine_Read_continuity(t *testing.T) {
+func TestSquare_Read_continuity(t *testing.T) {
 	tests := []struct {
 		name        string
 		chunkLength int
@@ -248,9 +227,9 @@ func TestSine_Read_continuity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			whole, err := NewSine(1, 440, 44_100)
+			whole, err := NewSquare(1, 440, 44_100)
 			require.NoError(t, err)
-			chunked, err := NewSine(1, 440, 44_100)
+			chunked, err := NewSquare(1, 440, 44_100)
 			require.NoError(t, err)
 
 			expected := make([]byte, 1_200)
@@ -262,6 +241,7 @@ func TestSine_Read_continuity(t *testing.T) {
 			for len(actual) < len(expected) {
 				n, err := chunked.Read(chunk)
 				require.NoError(t, err)
+				require.NotZero(t, n, "Read must make progress")
 				actual = append(actual, chunk[:n]...)
 			}
 			assert.Equal(t, expected, actual)
@@ -269,7 +249,7 @@ func TestSine_Read_continuity(t *testing.T) {
 	}
 }
 
-func TestSine_Read_shortBuffer(t *testing.T) {
+func TestSquare_Read_shortBuffer(t *testing.T) {
 	tests := []struct {
 		name         string
 		bufferLength int
@@ -282,7 +262,7 @@ func TestSine_Read_shortBuffer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewSine(1, 440, 44_100)
+			osc, err := NewSquare(1, 440, 44_100)
 			require.NoError(t, err)
 
 			n, err := osc.Read(make([]byte, tt.bufferLength))
@@ -292,8 +272,8 @@ func TestSine_Read_shortBuffer(t *testing.T) {
 	}
 }
 
-func BenchmarkSine_Next(b *testing.B) {
-	osc, err := NewSine(1, 440, 44_100)
+func BenchmarkSquare_Next(b *testing.B) {
+	osc, err := NewSquare(1, 440, 44_100)
 	require.NoError(b, err)
 
 	for b.Loop() {
@@ -301,8 +281,8 @@ func BenchmarkSine_Next(b *testing.B) {
 	}
 }
 
-func BenchmarkSine_NextSignedInt16(b *testing.B) {
-	osc, err := NewSine(1, 440, 44_100)
+func BenchmarkSquare_NextSignedInt16(b *testing.B) {
+	osc, err := NewSquare(1, 440, 44_100)
 	require.NoError(b, err)
 
 	for b.Loop() {
@@ -310,7 +290,7 @@ func BenchmarkSine_NextSignedInt16(b *testing.B) {
 	}
 }
 
-func BenchmarkSine_Read(b *testing.B) {
+func BenchmarkSquare_Read(b *testing.B) {
 	benchmarks := []struct {
 		name         string
 		bufferLength int
@@ -322,7 +302,7 @@ func BenchmarkSine_Read(b *testing.B) {
 
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
-			osc, err := NewSine(1, 440, 44_100)
+			osc, err := NewSquare(1, 440, 44_100)
 			require.NoError(b, err)
 			p := make([]byte, bm.bufferLength)
 
