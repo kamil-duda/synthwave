@@ -39,3 +39,7 @@ out/
 
 # macOS
 .DS_Store
+
+# superpowers: design specs and plans (docs/), plan execution workspace (.superpowers/)
+/docs/
+/.superpowers/

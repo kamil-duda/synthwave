@@ -1,9 +1,7 @@
 package oscillator
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 	"math"
 )
 
@@ -16,30 +14,18 @@ import (
 // starts or stops. Removing it here would push the peak above amplitude, so a DC-blocking filter after the oscillators should do it.
 // Like square, this pulse is not band-limited, so its harmonics above the Nyquist frequency alias.
 type pulse struct {
+	phaseTracker
 	// amplitude is the amplitude of the Oscillator's waveform, between 0 and 1
 	amplitude float64
-	// phase is the current, internal phase angle in radians
-	phase float64
-	// phaseStep is the phase increment per one sample, calculated as angular frequency / sample rate
-	phaseStep float64
+	// pulseWidth is the part of the period the wave is high, kept for String
+	pulseWidth float64
 	// edge is the phase in radians where the wave drops from +amplitude to -amplitude, 2PI * pulseWidth
 	edge float64
 }
 
 func NewPulse(amplitude, frequency float64, samplingRate int, pulseWidth float64) (Oscillator, error) {
-	if math.IsNaN(amplitude) || amplitude < 0 || 1 < amplitude {
-		return nil, fmt.Errorf("amplitude must be between 0 and 1, got: %v", amplitude)
-	}
-	if math.IsNaN(frequency) || frequency <= 0 {
-		return nil, fmt.Errorf("frequency must be positive, got %v", frequency)
-	}
-	if samplingRate <= 0 {
-		return nil, fmt.Errorf("samplingRate must be positive, got: %v", samplingRate)
-	}
-	// The Nyquist check covers only the fundamental frequency f, like in NewSquare (see there and NewSine).
-	nyquistFrequency := float64(samplingRate) / 2
-	if frequency >= nyquistFrequency {
-		return nil, fmt.Errorf("frequency must be below the Nyquist frequency %v Hz, got: %v", nyquistFrequency, frequency)
+	if err := validate(amplitude, frequency, samplingRate); err != nil {
+		return nil, err
 	}
 	// At pulseWidth 0 or 1 the wave would never change level, i.e. it would be a constant: silence.
 	if math.IsNaN(pulseWidth) || pulseWidth <= 0 || 1 <= pulseWidth {
@@ -47,41 +33,24 @@ func NewPulse(amplitude, frequency float64, samplingRate int, pulseWidth float64
 	}
 
 	return &pulse{
-		amplitude: amplitude,
-		phase:     0,
-		phaseStep: angularFrequency(frequency) / float64(samplingRate),
-		edge:      2 * math.Pi * pulseWidth,
+		phaseTracker: newPhaseTracker(frequency, samplingRate),
+		amplitude:    amplitude,
+		pulseWidth:   pulseWidth,
+		edge:         2 * math.Pi * pulseWidth,
 	}, nil
 }
 
 func (p *pulse) next() float64 {
-	value := p.amplitude
-	if p.phase >= p.edge {
-		value = -p.amplitude
+	if p.advance() < p.edge {
+		return p.amplitude
 	}
-	p.phase += p.phaseStep
-	if p.phase >= 2*math.Pi {
-		p.phase -= 2 * math.Pi
-	}
-	return value
+	return -p.amplitude
 }
 
-func (p *pulse) nextSignedInt16() int16 {
-	return int16(math.Round(p.next() * math.MaxInt16))
+func (p *pulse) Read(b []byte) (int, error) {
+	return encode(b, p.next)
 }
 
-func (p *pulse) Read(b []byte) (n int, err error) {
-	bufferLength := len(b)
-	if bufferLength < 2 {
-		return 0, io.ErrShortBuffer
-	}
-
-	// while index of next element is smaller than the length e.g. (byteIdx=2, byteIdx+1=3, pLength=3)
-	byteIdx := 0
-	for ; byteIdx+1 < bufferLength; byteIdx += 2 {
-		sample := p.nextSignedInt16()
-		// converting int16 to uint16 does not change the internal binary representation
-		binary.LittleEndian.PutUint16(b[byteIdx:byteIdx+2], uint16(sample))
-	}
-	return byteIdx, nil
+func (p *pulse) String() string {
+	return describe("pulse", p.amplitude, p.phaseTracker, fmt.Sprintf("pulseWidth %v", p.pulseWidth))
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"synthwave/oscillator"
 	"time"
 
@@ -52,18 +53,15 @@ func main() {
 	// Wait for the hardware to be ready
 	<-readyChan
 
-	players := []*oto.Player{
-		otoCtx.NewPlayer(sineOscillator),
-		otoCtx.NewPlayer(squareOscillator),
-		otoCtx.NewPlayer(pulseOscillator),
-		otoCtx.NewPlayer(sawtoothOscillator),
-		otoCtx.NewPlayer(triangleOscillator),
-	}
-	for _, player := range players {
-		player.SetBufferSize(bufferSizeSamples)
+	oscillators := []oscillator.Oscillator{sineOscillator, squareOscillator, pulseOscillator, sawtoothOscillator, triangleOscillator}
+	players := make([]*oto.Player, len(oscillators))
+	for i, osc := range oscillators {
+		players[i] = otoCtx.NewPlayer(osc)
+		players[i].SetBufferSize(bufferSizeSamples)
 	}
 	active := 0
 	players[active].Play()
+	log.Printf("playing %v", oscillators[active])
 
 	switchTicker := time.NewTicker(switchInterval)
 	errorTicker := time.NewTicker(10 * time.Millisecond)
@@ -75,6 +73,7 @@ func main() {
 			players[active].Pause()
 			active = (active + 1) % len(players)
 			players[active].Play()
+			log.Printf("playing %v", oscillators[active])
 		case <-errorTicker.C:
 			if err := otoCtx.Err(); err != nil {
 				panic("oto error: " + err.Error())
