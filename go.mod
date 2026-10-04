@@ -1,16 +1,15 @@
 module synthwave
 
-go 1.25
+go 1.27
 
 require (
-	github.com/ebitengine/oto/v3 v3.4.0
-	github.com/stretchr/testify v1.11.1
+	github.com/ebitengine/oto/v3 v3.5.1
+	github.com/stretchr/testify v1.12.1
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/ebitengine/purego v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/jfreymuth/pulse v0.1.3 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )

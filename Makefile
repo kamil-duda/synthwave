@@ -1,8 +1,5 @@
 .DEFAULT_GOAL := help
 
-# Enable Green Tea GC in Go 1.25 (default in 1.26)
-export GOEXPERIMENT=greenteagc
-
 mod: ## Run go mod tidy
 	go mod tidy
 
@@ -28,6 +25,11 @@ bench: ## Run benchmarks (only)
 	# -run ^$$ (run no unit tests - only benchmarks)
 	# ./... (look for benchmarks in all directories)
 	go test -v -bench . -benchmem -run ^$$ ./...
+
+vet: ## Run static analysis
+	# go vet reports code that compiles but is likely wrong, e.g. Printf format/argument mismatches, copied locks, unreachable code.
+	# ./... (check all packages)
+	go vet ./...
 
 coverage: ## Generate and open test coverage report
 	go test -v ./... \
