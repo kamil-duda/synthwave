@@ -21,7 +21,7 @@ func TestNewSquare_validation(t *testing.T) {
 	tests := []struct {
 		name          string
 		amplitude     float64
-		frequency     uint
+		frequency     float64
 		samplingRate  int
 		expectedError string
 	}{
@@ -34,6 +34,11 @@ func TestNewSquare_validation(t *testing.T) {
 		{"infinite amplitude", math.Inf(1), 440, 44_100, amplitudeError},
 		{"NaN amplitude", math.NaN(), 440, 44_100, amplitudeError},
 		{"zero frequency", 1, 0, 44_100, frequencyError},
+		{"negative frequency -440", 1, -440, 44_100, frequencyError},
+		{"negative fractional frequency -0.5", 1, -0.5, 44_100, frequencyError},
+		{"negative infinite frequency", 1, math.Inf(-1), 44_100, frequencyError},
+		{"NaN frequency", 1, math.NaN(), 44_100, frequencyError},
+		{"infinite frequency", 1, math.Inf(1), 44_100, nyquistError},
 		{"frequency at Nyquist", 1, 22_050, 44_100, nyquistError},
 		{"frequency above Nyquist", 1, 30_000, 44_100, nyquistError},
 		{"frequency above sampling rate", 1, 100_000, 44_100, nyquistError},
@@ -57,11 +62,12 @@ func TestNewSquare_boundaries(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
-		frequency    uint
+		frequency    float64
 		samplingRate int
 	}{
 		{"zero amplitude", 0, 440, 44_100},
 		{"full amplitude", 1, 440, 44_100},
+		{"fractional frequency below 1 Hz", 1, 0.5, 44_100},
 		{"frequency just below Nyquist", 1, 22_049, 44_100},
 		{"frequency just below Nyquist with odd sampling rate", 1, 2_200, 4_401},
 	}
@@ -81,13 +87,14 @@ func TestSquare_Next(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
-		frequency    uint
+		frequency    float64
 		samplingRate int
 	}{
 		{"full amplitude 100 Hz", 1, 100, 4_410},
 		{"half amplitude 100 Hz", 0.5, 100, 4_410},
 		{"440 Hz at 44.1 kHz", 1, 440, 44_100},
 		{"just below Nyquist", 1, 22_049, 44_100},
+		{"fractional 100.5 Hz", 1, 100.5, 4_410},
 	}
 
 	t.Parallel()
@@ -98,12 +105,13 @@ func TestSquare_Next(t *testing.T) {
 			require.NoError(t, err)
 
 			// three full periods, so the phase wraps around 2PI at least twice
-			samples := 3 * tt.samplingRate / int(tt.frequency)
+			samples := int(3 * float64(tt.samplingRate) / tt.frequency)
 			for i := range samples {
 				// Sample i lies (i*f mod samplingRate) / samplingRate of the way into its period and the first half is positive.
-				// Integer math keeps the expected sign exact. No case puts a sample exactly on an edge, except i = 0.
+				// The position is exact, because every frequency here is a whole or half number of Hz, so i*f has no rounding error.
+				// No case puts a sample closer than 1 to an edge, except i = 0.
 				expected := tt.amplitude
-				if 2*(i*int(tt.frequency)%tt.samplingRate) >= tt.samplingRate {
+				if 2*math.Mod(float64(i)*tt.frequency, float64(tt.samplingRate)) >= float64(tt.samplingRate) {
 					expected = -tt.amplitude
 				}
 				assert.Equal(t, expected, osc.next(), "sample %d", i)

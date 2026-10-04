@@ -15,6 +15,6 @@ type Oscillator interface {
 // One full period (360 deg) is 2 PI rad.
 // Having 1Hz means one full period per second, so an angular frequency of 2 PI rad / second.
 // Higher frequency means more angular frequency to keep up.
-func angularFrequency(f uint) float64 {
-	return 2 * math.Pi * float64(f)
+func angularFrequency(f float64) float64 {
+	return 2 * math.Pi * f
 }

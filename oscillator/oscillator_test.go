@@ -10,7 +10,7 @@ import (
 func TestAngularFrequency(t *testing.T) {
 	tests := []struct {
 		name             string
-		frequency        uint
+		frequency        float64
 		angularFrequency float64
 	}{
 		{"1 Hz", 1, 1 * 2 * math.Pi},
@@ -20,6 +20,7 @@ func TestAngularFrequency(t *testing.T) {
 		{"20 kHz", 20_000, 20_000 * 2 * math.Pi},
 		{"40 kHz", 40_000, 40_000 * 2 * math.Pi},
 		{"200 kHz", 200_000, 200_000 * 2 * math.Pi},
+		{"fractional 261.63 Hz (C4)", 261.63, 261.63 * 2 * math.Pi},
 	}
 
 	t.Parallel()

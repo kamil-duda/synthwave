@@ -1,24 +1,24 @@
-# Issues
+# Tasks
 
 - [x] **#1** Experiment with `oto` to understand audio data format - play some basic tone
 - [ ] **#2** Implement oscillators for standard waveforms
   - [x] **#3** Sine wave
   - [x] **#4** Square wave
   - [x] **#4b** Pulse wave
-  - [ ] **#5** Sawtooth wave
-  - [ ] **#6** Triangle wave
-  - [ ] Change `frequency` from `uint` to `float64` (notes based on A440 are not whole numbers, e.g. C4 = 261.63 Hz)
-  - [ ] Extract code shared by oscillators (validation, phase accumulator, int16 encoding in `Read`) and their common tests
+  - [x] **#5** Sawtooth wave
+  - [x] **#6** Triangle wave
+  - [x] **#39** Change `frequency` from `uint` to `float64` (notes based on A440 are not whole numbers, e.g. C4 = 261.63 Hz)
+  - [ ] **#40** Extract code shared by oscillators (validation, phase accumulator, int16 encoding in `Read`) and their common tests
 - [ ] **#7** Implement a basic signal generator interface for output to `oto`
-- [ ] White noise source: random samples in [-amplitude, amplitude] with no frequency or phase (percussion, hi-hats, wind), seedable so tests are deterministic
-- [ ] DC-blocking filter right after each oscillator, before the envelope and mixing: one-pole high-pass `y[n] = x[n] - x[n-1] + R*y[n-1]` with R ~ 0.999 (cutoff ~7 Hz; 0.995 would be ~35 Hz and thin the bass) that removes the DC offset (the signal's average, e.g. -0.6 * amplitude of a 0.2 pulse wave)
+- [ ] **#41** White noise source: random samples in [-amplitude, amplitude] with no frequency or phase (percussion, hi-hats, wind), seedable so tests are deterministic
+- [ ] **#42** DC-blocking filter right after each oscillator, before the envelope and mixing: one-pole high-pass `y[n] = x[n] - x[n-1] + R*y[n-1]` with R ~ 0.999 (cutoff ~7 Hz; 0.995 would be ~35 Hz and thin the bass) that removes the DC offset (the signal's average, e.g. -0.6 * amplitude of a 0.2 pulse wave)
 - [ ] **#10** Implement frequency calculation based on A440
 - [ ] **#8** Implement a single wave player with frequency and volume control
-  - [ ] Change parameters safely while playing: no data race between the UI and oto's `Read`, smoothed volume changes (no zipper noise), phase-continuous frequency changes (no clicks)
-- [ ] Spike: can the terminal report key release (e.g. kitty keyboard protocol)? Decides how #12 and #13 get note on / note off
-- [ ] TUI basics: library choice, main loop, quit key, terminal restored on exit
+  - [ ] **#43** Change parameters safely while playing: no data race between the UI and oto's `Read`, smoothed volume changes (no zipper noise), phase-continuous frequency changes (no clicks)
+- [ ] **#44** Spike: can the terminal report key release (e.g. kitty keyboard protocol)? Decides how #12 and #13 get note on / note off
+- [ ] **#45** TUI basics: library choice, main loop, quit key, terminal restored on exit
 - [ ] **#9** Add simple TUI input to change frequency and volume
-- [ ] Lower the latency for live play (now ~100 ms: player buffer ~46 ms + OS buffer 50 ms)
+- [ ] **#46** Lower the latency for live play (now ~100 ms: player buffer ~46 ms + OS buffer 50 ms)
 - [ ] **#12** Map PC keyboard keys to a piano octave
 - [ ] **#38** Octave switcher
 - [ ] **#21** TUI - Display piano keys
@@ -31,19 +31,19 @@
 - [ ] **#30** Effects - Filters: low-pass, high-pass, band-pass
 - [ ] **#18** Add ability to generate multiple signals in oscilator
 - [ ] **#19** Implement an audio mixer to combine multiple signals
-  - [ ] Master gain and clipping protection (a sum of signals can exceed [-1, 1])
+  - [ ] **#47** Master gain and clipping protection (a sum of signals can exceed [-1, 1])
 - [ ] **#20** Add TUI elements for controlling the mixer
-- [ ] LFO - low-frequency oscillator as a modulation source (for #29, #25 and PWM)
+- [ ] **#48** LFO - low-frequency oscillator as a modulation source (for #29, #25 and #49)
 - [ ] **#29** Effects - Tremolo
 - [ ] **#25** Effects - Vibrato
-- [ ] PWM - modulate the pulse wave's `pulseWidth` with the LFO
+- [ ] **#49** PWM - modulate the pulse wave's `pulseWidth` with the LFO (#48)
 - [ ] **#23** Add effects - Amplitude modulation
 - [ ] **#24** Add effects - Frequency modulation
 - [ ] **#26** Effects - Distortion
 - [ ] **#27** Effects - Echo
 - [ ] **#28** Effects - Reverb
 - [ ] **#31** Add TUI visualization for waveforms
-- [ ] Band-limited square, pulse and sawtooth (PolyBLEP) to remove aliasing
+- [ ] **#50** Band-limited square, pulse and sawtooth (PolyBLEP) to remove aliasing
 - [ ] **#37** Optimize oscillator functions
 - [ ] **#32** Add ability to save/load presets
 - [ ] **#22** TUI - experiment with mouse support

@@ -26,11 +26,11 @@ type pulse struct {
 	edge float64
 }
 
-func NewPulse(amplitude float64, frequency uint, samplingRate int, pulseWidth float64) (Oscillator, error) {
+func NewPulse(amplitude, frequency float64, samplingRate int, pulseWidth float64) (Oscillator, error) {
 	if math.IsNaN(amplitude) || amplitude < 0 || 1 < amplitude {
 		return nil, fmt.Errorf("amplitude must be between 0 and 1, got: %v", amplitude)
 	}
-	if frequency == 0 {
+	if math.IsNaN(frequency) || frequency <= 0 {
 		return nil, fmt.Errorf("frequency must be positive, got %v", frequency)
 	}
 	if samplingRate <= 0 {
@@ -38,7 +38,7 @@ func NewPulse(amplitude float64, frequency uint, samplingRate int, pulseWidth fl
 	}
 	// The Nyquist check covers only the fundamental frequency f, like in NewSquare (see there and NewSine).
 	nyquistFrequency := float64(samplingRate) / 2
-	if float64(frequency) >= nyquistFrequency {
+	if frequency >= nyquistFrequency {
 		return nil, fmt.Errorf("frequency must be below the Nyquist frequency %v Hz, got: %v", nyquistFrequency, frequency)
 	}
 	// At pulseWidth 0 or 1 the wave would never change level, i.e. it would be a constant: silence.

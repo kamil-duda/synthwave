@@ -11,20 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewPulse_validation(t *testing.T) {
+func TestNewTriangle_validation(t *testing.T) {
 	const (
 		amplitudeError    = "amplitude must be between 0 and 1"
 		frequencyError    = "frequency must be positive"
 		samplingRateError = "samplingRate must be positive"
 		nyquistError      = "frequency must be below the Nyquist frequency"
-		pulseWidthError   = "pulseWidth must be greater than 0 and less than 1"
+		symmetryError     = "symmetry must be between 0 and 1"
 	)
 	tests := []struct {
 		name          string
 		amplitude     float64
 		frequency     float64
 		samplingRate  int
-		pulseWidth    float64
+		symmetry      float64
 		expectedError string
 	}{
 		{"negative amplitude -0.1", -0.1, 440, 44_100, 0.5, amplitudeError},
@@ -48,66 +48,69 @@ func TestNewPulse_validation(t *testing.T) {
 		{"zero sampling rate", 1, 440, 0, 0.5, samplingRateError},
 		{"negative sampling rate -1", 1, 440, -1, 0.5, samplingRateError},
 		{"negative sampling rate -10", 1, 440, -10, 0.5, samplingRateError},
-		{"zero pulse width", 1, 440, 44_100, 0, pulseWidthError},
-		{"full pulse width", 1, 440, 44_100, 1, pulseWidthError},
-		{"negative pulse width", 1, 440, 44_100, -0.2, pulseWidthError},
-		{"too large pulse width", 1, 440, 44_100, 1.2, pulseWidthError},
-		{"infinite pulse width", 1, 440, 44_100, math.Inf(1), pulseWidthError},
-		{"NaN pulse width", 1, 440, 44_100, math.NaN(), pulseWidthError},
+		{"negative symmetry -0.1", 1, 440, 44_100, -0.1, symmetryError},
+		{"too large symmetry 1.1", 1, 440, 44_100, 1.1, symmetryError},
+		{"negative infinite symmetry", 1, 440, 44_100, math.Inf(-1), symmetryError},
+		{"infinite symmetry", 1, 440, 44_100, math.Inf(1), symmetryError},
+		{"NaN symmetry", 1, 440, 44_100, math.NaN(), symmetryError},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NewPulse(tt.amplitude, tt.frequency, tt.samplingRate, tt.pulseWidth)
+			_, err := NewTriangle(tt.amplitude, tt.frequency, tt.samplingRate, tt.symmetry)
 			assert.ErrorContains(t, err, tt.expectedError)
 		})
 	}
 }
 
-func TestNewPulse_boundaries(t *testing.T) {
+func TestNewTriangle_boundaries(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
 		frequency    float64
 		samplingRate int
-		pulseWidth   float64
+		symmetry     float64
 	}{
 		{"zero amplitude", 0, 440, 44_100, 0.5},
 		{"full amplitude", 1, 440, 44_100, 0.5},
 		{"fractional frequency below 1 Hz", 1, 0.5, 44_100, 0.5},
 		{"frequency just below Nyquist", 1, 22_049, 44_100, 0.5},
 		{"frequency just below Nyquist with odd sampling rate", 1, 2_200, 4_401, 0.5},
-		{"narrow pulse width 0.01", 1, 440, 44_100, 0.01},
-		{"wide pulse width 0.99", 1, 440, 44_100, 0.99},
+		{"zero symmetry is a falling sawtooth", 1, 440, 44_100, 0},
+		{"full symmetry is a rising sawtooth", 1, 440, 44_100, 1},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewPulse(tt.amplitude, tt.frequency, tt.samplingRate, tt.pulseWidth)
+			osc, err := NewTriangle(tt.amplitude, tt.frequency, tt.samplingRate, tt.symmetry)
 			assert.NoError(t, err)
 			assert.NotNil(t, osc)
 		})
 	}
 }
 
-func TestPulse_Next(t *testing.T) {
+func TestTriangle_Next(t *testing.T) {
 	tests := []struct {
 		name         string
 		amplitude    float64
 		frequency    float64
 		samplingRate int
-		pulseWidth   float64
+		symmetry     float64
 	}{
-		{"pulse width 0.2", 1, 100, 4_410, 0.2},
-		{"pulse width 0.25 at half amplitude", 0.5, 100, 4_410, 0.25},
-		{"pulse width 0.5 is a square", 1, 100, 4_410, 0.5},
-		{"pulse width 0.8", 1, 100, 4_410, 0.8},
-		{"440 Hz at 44.1 kHz", 1, 440, 44_100, 0.25},
-		{"just below Nyquist", 1, 22_049, 44_100, 0.25},
+		{"symmetry 0.5 is a symmetric triangle", 1, 100, 4_410, 0.5},
+		{"symmetry 0.2 rises fast and falls slowly", 1, 100, 4_410, 0.2},
+		{"symmetry 0.8 rises slowly and falls fast", 1, 100, 4_410, 0.8},
+		{"half amplitude", 0.5, 100, 4_410, 0.25},
+		{"zero symmetry is a falling sawtooth", 1, 100, 4_410, 0},
+		{"full symmetry is a rising sawtooth", 1, 100, 4_410, 1},
+		{"zero amplitude at zero symmetry", 0, 100, 4_410, 0},
+		{"zero amplitude at full symmetry", 0, 100, 4_410, 1},
+		{"440 Hz at 44.1 kHz", 1, 440, 44_100, 0.3},
+		{"just below Nyquist", 1, 22_049, 44_100, 0.5},
 		{"fractional 100.5 Hz", 1, 100.5, 4_410, 0.2},
 	}
 
@@ -115,54 +118,60 @@ func TestPulse_Next(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewPulse(tt.amplitude, tt.frequency, tt.samplingRate, tt.pulseWidth)
+			osc, err := NewTriangle(tt.amplitude, tt.frequency, tt.samplingRate, tt.symmetry)
 			require.NoError(t, err)
 
 			// three full periods, so the phase wraps around 2PI at least twice
 			samples := int(3 * float64(tt.samplingRate) / tt.frequency)
 			for i := range samples {
-				// Sample i lies (i*f mod samplingRate) / samplingRate of the way into its period and is high while that is below pulseWidth.
+				// Sample i lies x = (i*f mod samplingRate) / samplingRate of the way into its period.
+				// The wave rises from -amplitude to +amplitude while x < symmetry and falls back for the rest of the period.
 				// The position is exact, because every frequency here is a whole or half number of Hz, so i*f has no rounding error.
-				// No case puts it closer than 2 to pulseWidth * samplingRate, so no sample sits on an edge.
-				expected := tt.amplitude
-				if math.Mod(float64(i)*tt.frequency, float64(tt.samplingRate)) >= tt.pulseWidth*float64(tt.samplingRate) {
-					expected = -tt.amplitude
+				// At symmetry 0 and 1 the wave jumps at the end of the period. No case puts a sample closer than 2 to it, except i = 0.
+				x := math.Mod(float64(i)*tt.frequency, float64(tt.samplingRate)) / float64(tt.samplingRate)
+				expected := tt.amplitude * (1 - 2*(x-tt.symmetry)/(1-tt.symmetry))
+				if x < tt.symmetry {
+					expected = tt.amplitude * (-1 + 2*x/tt.symmetry)
 				}
-				assert.Equal(t, expected, osc.next(), "sample %d", i)
+				assert.InDelta(t, expected, osc.next(), 1e-9, "sample %d", i)
 			}
 		})
 	}
 }
 
-func TestPulse_NextSignedInt16(t *testing.T) {
+func TestTriangle_NextSignedInt16(t *testing.T) {
 	tests := []struct {
 		name        string
 		amplitude   float64
-		pulseWidth  float64
+		symmetry    float64
 		sampleIndex int
 		expected    int16
 	}{
-		{"high at start", 1, 0.2, 0, 32_767},
-		{"last high sample", 1, 0.2, 8, 32_767},
-		{"first low sample", 1, 0.2, 9, -32_767},
-		{"last low sample of the first period", 1, 0.2, 44, -32_767},
-		{"high again after the phase wraps", 1, 0.2, 45, 32_767},
-		{"wide pulse last high sample", 1, 0.8, 35, 32_767},
-		{"wide pulse first low sample", 1, 0.8, 36, -32_767},
-		{"half amplitude rounds half away from zero", 0.5, 0.2, 0, 16_384},
-		{"negative half amplitude rounds half away from zero", 0.5, 0.2, 9, -16_384},
-		{"quarter amplitude rounds up", 0.25, 0.2, 0, 8_192},
-		{"negative quarter amplitude rounds down", 0.25, 0.2, 9, -8_192},
+		{"negative peak at start", 1, 0.2, 0, -32_767},
+		{"rising rounds toward zero", 1, 0.2, 4, -3_046},
+		{"last rising sample rounds down", 1, 0.2, 8, 26_674},
+		{"first falling sample rounds up", 1, 0.2, 9, 32_433},
+		{"falling rounds down", 1, 0.2, 23, 6_427},
+		{"last falling sample of the first period", 1, 0.2, 44, -32_581},
+		{"rising again after the phase wraps", 1, 0.2, 45, -26_080},
+		{"symmetric last rising sample", 1, 0.5, 22, 32_618},
+		{"symmetric first falling sample", 1, 0.5, 23, 29_944},
+		{"half amplitude rounds half away from zero", 0.5, 0.2, 0, -16_384},
+		{"zero symmetry starts at the positive peak", 1, 0, 0, 32_767},
+		{"zero symmetry falls through zero", 1, 0, 23, -1_412},
+		{"full symmetry rises through zero", 1, 1, 23, 1_412},
+		{"full symmetry last sample before the jump", 1, 1, 44, 32_618},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// 100 Hz at 4410 Hz: sample i lies at 100*i mod 4410 of the 4410 positions in a period.
-			// Pulse width 0.2 is high below position 882: samples 0-8 are high, 9-44 low, 45 (position 90) starts the next period.
-			// Pulse width 0.8 is high below position 3528: sample 35 (3500) is high, 36 (3600) low.
-			osc, err := NewPulse(tt.amplitude, 100, 4_410, tt.pulseWidth)
+			// 100 Hz at 4410 Hz: sample i lies at position 100*i mod 4410 of the 4410 positions in a period.
+			// Symmetry 0.2 rises below position 882 (samples 0-8) and falls for the rest of the period (samples 9-44),
+			// e.g. sample 9: (1 - 2 * (900 - 882) / (0.8 * 4410)) * 32767 = 32432.64 -> 32433.
+			// Symmetry 0.5 peaks at position 2205, between samples 22 and 23.
+			osc, err := NewTriangle(tt.amplitude, 100, 4_410, tt.symmetry)
 			require.NoError(t, err)
 
 			for range tt.sampleIndex {
@@ -173,7 +182,7 @@ func TestPulse_NextSignedInt16(t *testing.T) {
 	}
 }
 
-func TestPulse_Read(t *testing.T) {
+func TestTriangle_Read(t *testing.T) {
 	tests := []struct {
 		name         string
 		bufferLength int
@@ -189,9 +198,9 @@ func TestPulse_Read(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewPulse(1, 440, 44_100, 0.2)
+			osc, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(t, err)
-			twin, err := NewPulse(1, 440, 44_100, 0.2)
+			twin, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(t, err)
 
 			p := bytes.Repeat([]byte{0xAA}, tt.bufferLength)
@@ -211,25 +220,24 @@ func TestPulse_Read(t *testing.T) {
 	}
 }
 
-func TestPulse_Read_encoding(t *testing.T) {
+func TestTriangle_Read_encoding(t *testing.T) {
 	tests := []struct {
 		name          string
-		amplitude     float64
 		sampleIndex   int
 		expectedBytes []byte
 	}{
-		{"positive peak 32767 = 0x7FFF", 1, 0, []byte{0xFF, 0x7F}},
-		{"negative peak -32767 = 0x8001 in two's complement", 1, 9, []byte{0x01, 0x80}},
-		{"quarter amplitude 8192 = 0x2000", 0.25, 0, []byte{0x00, 0x20}},
-		{"negative quarter amplitude -8192 = 0xE000 in two's complement", 0.25, 9, []byte{0x00, 0xE0}},
+		{"negative peak -32767 = 0x8001 in two's complement", 0, []byte{0x01, 0x80}},
+		{"negative -3046 = 0xF41A in two's complement", 4, []byte{0x1A, 0xF4}},
+		{"positive 32433 = 0x7EB1", 9, []byte{0xB1, 0x7E}},
+		{"positive 6427 = 0x191B", 23, []byte{0x1B, 0x19}},
 	}
 
 	t.Parallel()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// 100 Hz at 4410 Hz with pulse width 0.2: samples 0-8 are high, 9-44 low
-			osc, err := NewPulse(tt.amplitude, 100, 4_410, 0.2)
+			// 100 Hz at 4410 Hz with symmetry 0.2, the same samples as in TestTriangle_NextSignedInt16
+			osc, err := NewTriangle(1, 100, 4_410, 0.2)
 			require.NoError(t, err)
 
 			p := make([]byte, 2*(tt.sampleIndex+1))
@@ -240,7 +248,7 @@ func TestPulse_Read_encoding(t *testing.T) {
 	}
 }
 
-func TestPulse_Read_continuity(t *testing.T) {
+func TestTriangle_Read_continuity(t *testing.T) {
 	tests := []struct {
 		name        string
 		chunkLength int
@@ -254,9 +262,9 @@ func TestPulse_Read_continuity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			whole, err := NewPulse(1, 440, 44_100, 0.2)
+			whole, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(t, err)
-			chunked, err := NewPulse(1, 440, 44_100, 0.2)
+			chunked, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(t, err)
 
 			expected := make([]byte, 1_200)
@@ -276,7 +284,7 @@ func TestPulse_Read_continuity(t *testing.T) {
 	}
 }
 
-func TestPulse_Read_shortBuffer(t *testing.T) {
+func TestTriangle_Read_shortBuffer(t *testing.T) {
 	tests := []struct {
 		name         string
 		bufferLength int
@@ -289,7 +297,7 @@ func TestPulse_Read_shortBuffer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			osc, err := NewPulse(1, 440, 44_100, 0.2)
+			osc, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(t, err)
 
 			n, err := osc.Read(make([]byte, tt.bufferLength))
@@ -299,8 +307,8 @@ func TestPulse_Read_shortBuffer(t *testing.T) {
 	}
 }
 
-func BenchmarkPulse_Next(b *testing.B) {
-	osc, err := NewPulse(1, 440, 44_100, 0.2)
+func BenchmarkTriangle_Next(b *testing.B) {
+	osc, err := NewTriangle(1, 440, 44_100, 0.2)
 	require.NoError(b, err)
 
 	for b.Loop() {
@@ -308,8 +316,8 @@ func BenchmarkPulse_Next(b *testing.B) {
 	}
 }
 
-func BenchmarkPulse_NextSignedInt16(b *testing.B) {
-	osc, err := NewPulse(1, 440, 44_100, 0.2)
+func BenchmarkTriangle_NextSignedInt16(b *testing.B) {
+	osc, err := NewTriangle(1, 440, 44_100, 0.2)
 	require.NoError(b, err)
 
 	for b.Loop() {
@@ -317,7 +325,7 @@ func BenchmarkPulse_NextSignedInt16(b *testing.B) {
 	}
 }
 
-func BenchmarkPulse_Read(b *testing.B) {
+func BenchmarkTriangle_Read(b *testing.B) {
 	benchmarks := []struct {
 		name         string
 		bufferLength int
@@ -329,7 +337,7 @@ func BenchmarkPulse_Read(b *testing.B) {
 
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
-			osc, err := NewPulse(1, 440, 44_100, 0.2)
+			osc, err := NewTriangle(1, 440, 44_100, 0.2)
 			require.NoError(b, err)
 			p := make([]byte, bm.bufferLength)
 

@@ -13,18 +13,18 @@ type sine struct {
 	// amplitude is the amplitude of the Oscillator's waveform, between 0 and 1
 	amplitude float64
 	// frequency is the Oscillator's frequency in Hz
-	frequency uint
+	frequency float64
 	// phase is the current, internal phase angle in radians
 	phase float64
 	// phaseStep is the phase increment per one sample, calculated as angular frequency / sample rate
 	phaseStep float64
 }
 
-func NewSine(amplitude float64, frequency uint, samplingRate int) (Oscillator, error) {
+func NewSine(amplitude, frequency float64, samplingRate int) (Oscillator, error) {
 	if math.IsNaN(amplitude) || amplitude < 0 || 1 < amplitude {
 		return nil, fmt.Errorf("amplitude must be between 0 and 1, got: %v", amplitude)
 	}
-	if frequency == 0 {
+	if math.IsNaN(frequency) || frequency <= 0 {
 		return nil, fmt.Errorf("frequency must be positive, got %v", frequency)
 	}
 	if samplingRate <= 0 {
@@ -36,7 +36,7 @@ func NewSine(amplitude float64, frequency uint, samplingRate int) (Oscillator, e
 	// Staying below it also keeps phaseStep < PI, so next() never needs to wrap the phase more than once.
 	// The division is done on floats, because integer division would truncate an odd sampling rate (4401 / 2 = 2200 instead of 2200.5) and wrongly reject a valid 2200 Hz.
 	nyquistFrequency := float64(samplingRate) / 2
-	if float64(frequency) >= nyquistFrequency {
+	if frequency >= nyquistFrequency {
 		return nil, fmt.Errorf("frequency must be below the Nyquist frequency %v Hz, got: %v", nyquistFrequency, frequency)
 	}
 

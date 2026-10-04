@@ -14,6 +14,7 @@ const channels = 1                               // 1 - mono, 2 - stereo
 const volume = 0.2                               // shared by all oscillators, so only the waveform changes
 const baseFrequency = 440                        // shared by all oscillators, so only the waveform changes
 const pulseWidth = 0.2                           // part of the period the pulse wave is high (0.5 would be a square)
+const triangleSymmetry = 0.2                     // part of the period the triangle wave rises (0.5 would be the classic triangle, close to a sine; 1 a sawtooth)
 const switchInterval = 2 * time.Second           // how long each oscillator plays before switching to the next one
 
 func main() {
@@ -29,6 +30,14 @@ func main() {
 	if err != nil {
 		panic("Error creating pulse oscillator: " + err.Error())
 	}
+	sawtoothOscillator, err := oscillator.NewSawtooth(volume, baseFrequency, samplingRate)
+	if err != nil {
+		panic("Error creating sawtooth oscillator: " + err.Error())
+	}
+	triangleOscillator, err := oscillator.NewTriangle(volume, baseFrequency, samplingRate, triangleSymmetry)
+	if err != nil {
+		panic("Error creating triangle oscillator: " + err.Error())
+	}
 
 	ctxOptions := &oto.NewContextOptions{}
 	ctxOptions.SampleRate = samplingRate
@@ -43,7 +52,13 @@ func main() {
 	// Wait for the hardware to be ready
 	<-readyChan
 
-	players := []*oto.Player{otoCtx.NewPlayer(sineOscillator), otoCtx.NewPlayer(squareOscillator), otoCtx.NewPlayer(pulseOscillator)}
+	players := []*oto.Player{
+		otoCtx.NewPlayer(sineOscillator),
+		otoCtx.NewPlayer(squareOscillator),
+		otoCtx.NewPlayer(pulseOscillator),
+		otoCtx.NewPlayer(sawtoothOscillator),
+		otoCtx.NewPlayer(triangleOscillator),
+	}
 	for _, player := range players {
 		player.SetBufferSize(bufferSizeSamples)
 	}
