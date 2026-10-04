@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents working with code in this reposi
 
 ## Commands
 
-- `make run`: play the synth (opens the audio device and alternates sine and square every 5 s until killed)
+- `make run`: play the synth (opens the audio device and cycles sine -> square -> pulse every 4 s until killed)
 - `make run-gc-flags`: run with `-gcflags="-m -m"` to inspect escape analysis / inlining
 - `make test`: `go test -v ./...`
 - `make bench`: benchmarks only (`-bench . -benchmem -run ^$`)
@@ -25,21 +25,22 @@ go test -v -bench BenchmarkName -benchmem -run '^$' ./oscillator
 A Go audio synthesizer (module `synthwave`, Go 1.27) built on `github.com/ebitengine/oto/v3`.
 
 Files:
-- `main.go`: entry point. Creates a sine and a square oscillator with the same `volume` (0.2, passed as their amplitude) and `baseFrequency` (440 Hz), the oto context and one player per oscillator. It plays the sine first and every `switchInterval` (5 s) pauses the active player and plays the next one. A paused player keeps its buffered samples, so each oscillator resumes where it stopped. The switch is not sample-accurate and can click. Meanwhile it polls every 10 ms, panics on an oto context error and exits when the active player stops playing. Audio settings are constants: `samplingRate` (44.1 kHz), `channels` (1, mono), `hardwareBufferSize` (50 ms OS buffer), `bufferSizeSamples` (oto player buffer; despite the name it is 4096 bytes, see below).
+- `main.go`: entry point. Creates a sine, a square and a pulse oscillator (`pulseWidth` 0.2) with the same `volume` (0.2, passed as their amplitude) and `baseFrequency` (440 Hz), the oto context and one player per oscillator. It plays the sine first and every `switchInterval` (4 s) pauses the active player and plays the next one, wrapping around. A paused player keeps its buffered samples, so each oscillator resumes where it stopped. The switch is not sample-accurate and can click. Meanwhile it polls every 10 ms, panics on an oto context error and exits when the active player stops playing. Audio settings are constants: `samplingRate` (44.1 kHz), `channels` (1, mono), `hardwareBufferSize` (50 ms OS buffer), `bufferSizeSamples` (oto player buffer; despite the name it is 4096 bytes, see below).
 - `oscillator/oscillator.go`: the `Oscillator` interface and the `angularFrequency` helper.
 - `oscillator/sine.go`: `NewSine` and the unexported `sine` struct.
-- `oscillator/basic_square.go`: `NewSquare` and the unexported `square` struct, a basic square wave: symmetric (50% duty cycle) and naive (not band-limited).
+- `oscillator/square.go`: `NewSquare` and the unexported `square` struct, a basic square wave: symmetric (50% duty cycle) and naive (not band-limited).
+- `oscillator/pulse.go`: `NewPulse` and the unexported `pulse` struct, a naive pulse wave whose `pulseWidth` (duty cycle) is set in the constructor.
 - `*_test.go` next to each file: tests and benchmarks (`main` has none; it needs an audio device).
 
 oto uses a pull model: `main.go` creates an oto context and passes an oscillator to `otoCtx.NewPlayer`. The player then calls the oscillator's `Read([]byte)` whenever the audio buffer needs refilling. Each oscillator is therefore an `io.Reader` that encodes generated samples directly into the byte stream.
 
 Data flow during playback: oto's player calls `Read(p)` with 4096-byte buffers (`player.SetBufferSize(bufferSizeSamples)` takes bytes, i.e. 2048 samples, ~46 ms) -> `Read` calls `nextSignedInt16()` once per 2 bytes -> `nextSignedInt16()` scales `next()` to int16 -> `next()` returns the waveform's value at the current phase and advances the phase. Oscillators never return `io.EOF`, so `make run` plays until killed.
 
-**The sample format is an implicit contract between `main.go` and `Read`.** The oto context is set to 44.1 kHz, mono, `oto.FormatSignedInt16LE`. Each oscillator's `Read` (`sine.Read`, `square.Read`) writes one little-endian int16 (2 bytes) per sample and does not interleave channels. Changing the channel count or sample format in `main.go` means changing the encoding in `Read` too, or the audio will be garbled.
+**The sample format is an implicit contract between `main.go` and `Read`.** The oto context is set to 44.1 kHz, mono, `oto.FormatSignedInt16LE`. Each oscillator's `Read` (`sine.Read`, `square.Read`, `pulse.Read`) writes one little-endian int16 (2 bytes) per sample and does not interleave channels. Changing the channel count or sample format in `main.go` means changing the encoding in `Read` too, or the audio will be garbled.
 
-Oscillator pipeline (`oscillator/`). `sine` and `square` currently duplicate the validation, the phase accumulator and `Read` (extracting them is a task in `ISSUES.md`), so a fix in one usually belongs in the other too:
-- `NewSine` and `NewSquare` validate their arguments the same way: amplitude in [0, 1] (NaN rejected), frequency > 0 and below the Nyquist frequency (`samplingRate/2`, compared as floats so odd sampling rates work), samplingRate > 0. They return the interface rather than the concrete unexported struct.
-- `next()` returns a float sample in `[-amplitude, amplitude]` and advances a phase accumulator by `phaseStep = 2PIf / samplingRate`, wrapping at 2PI with a single subtraction. That is enough only because the Nyquist check keeps `phaseStep < PI`. `sine` returns `amplitude * sin(phase)`. `square` returns `+amplitude` for phase in [0, PI) and `-amplitude` in [PI, 2PI). Its harmonics above the Nyquist frequency alias, and the check cannot prevent that (see the `square` doc comment).
+Oscillator pipeline (`oscillator/`). `sine`, `square` and `pulse` currently duplicate the validation, the phase accumulator and `Read` (extracting them is a task in `ISSUES.md`), so a fix in one usually belongs in the others too:
+- `NewSine`, `NewSquare` and `NewPulse` validate their shared arguments the same way: amplitude in [0, 1] (NaN rejected), frequency > 0 and below the Nyquist frequency (`samplingRate/2`, compared as floats so odd sampling rates work), samplingRate > 0. `NewPulse` takes `pulseWidth` as its last argument and requires it in the open range (0, 1), because 0 or 1 would be a constant (silence). They return the interface rather than the concrete unexported struct.
+- `next()` returns a float sample in `[-amplitude, amplitude]` and advances a phase accumulator by `phaseStep = 2PIf / samplingRate`, wrapping at 2PI with a single subtraction. That is enough only because the Nyquist check keeps `phaseStep < PI`. `sine` returns `amplitude * sin(phase)`. `square` returns `+amplitude` for phase in [0, PI) and `-amplitude` in [PI, 2PI). Its harmonics above the Nyquist frequency alias, and the check cannot prevent that (see the `square` doc comment). `pulse` returns `+amplitude` for phase in [0, 2PI*pulseWidth) and `-amplitude` for the rest (0.5 gives the square). It aliases like `square`, and any other `pulseWidth` gives it a DC offset (average `amplitude * (2*pulseWidth - 1)`), which is left for a DC-blocking filter (see `ISSUES.md`) because removing it in the oscillator would push the peak above `amplitude`.
 - `nextSignedInt16()` scales that sample to int16 with `math.Round`, so values stay in [-32767, 32767].
 - `Read` fills the buffer two bytes at a time, returns `io.ErrShortBuffer` for `len(p) < 2` and leaves a trailing odd byte untouched.
 
@@ -58,7 +59,7 @@ Keep this section current: when a change adds or moves files, alters the data fl
   3. Refactor: improve names, duplication and comments in code and tests without changing behavior; the suite stays green after each step.
 
   Every change ships with a test that fails if the change is reverted.
-- Interface methods (e.g. every `Oscillator` method: `Read`, `next`, `nextSignedInt16`) also need benchmarks. Use `for b.Loop()` (plus `b.SetBytes` for byte-oriented methods). All of them are currently 0 allocs/op for both oscillators; treat a new allocation as a regression.
+- Interface methods (e.g. every `Oscillator` method: `Read`, `next`, `nextSignedInt16`) also need benchmarks. Use `for b.Loop()` (plus `b.SetBytes` for byte-oriented methods). All of them are currently 0 allocs/op for every oscillator; treat a new allocation as a regression.
 - Test and benchmark names follow Go's naming of examples: `Test<Function>` or `Test<Type>_<Method>` (capitalized even for unexported identifiers, e.g. `TestSine_NextSignedInt16`), plus an optional `_<aspect>` starting with a lowercase letter (`TestNewSine_validation`, `TestSine_Read_encoding`). The underscore only separates these parts, so `-run TestSine_Read` runs every `Read` test.
 - Validation tests assert the specific message (`assert.ErrorContains`) and keep the other params valid (e.g. 440 Hz / 44_100), because checks mask each other (a negative `samplingRate` also trips the Nyquist check).
 - Use plain ASCII in code, comments, docs and messages: `PI`/`2PI` not `π`, `->` not `→`, `-` not `—`. Don't comment self-explanatory code; do explain DSP concepts (e.g. Nyquist).

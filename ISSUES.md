@@ -7,7 +7,7 @@ Work tracker based on GitHub issues, snapshot from 2026-10-04.
 - [ ] **#2** Implement oscillators for standard waveforms
   - [x] **#3** Sine wave
   - [x] **#4** Square wave
-  - [ ] **#4b** Advanced square wave
+  - [ ] **#4b** Pulse wave
   - [ ] **#5** Sawtooth wave
   - [ ] **#6** Triangle wave
   - [ ] Extract code shared by oscillators (validation, phase accumulator, int16 encoding in `Read`) and their common tests
@@ -24,6 +24,7 @@ Work tracker based on GitHub issues, snapshot from 2026-10-04.
   - [ ] **#17** Release - Time for the sound to fade out after the key is released
 - [ ] **#18** Add ability to generate multiple signals in oscilator
 - [ ] **#19** Implement an audio mixer to combine multiple signals
+  - [ ] DC-blocking filter (one-pole high-pass, `y[n] = x[n] - x[n-1] + R*y[n-1]`, R ~ 0.995) that removes the DC offset (the signal's average, e.g. -0.6 * amplitude of a 0.2 pulse wave) before mixing / output
 - [ ] **#20** Add TUI elements for controlling the mixer
 - [ ] **#21** TUI - Display piano keys
 - [ ] **#22** TUI - experiment with mouse support

@@ -13,7 +13,8 @@ const hardwareBufferSize = 50 * time.Millisecond // length of the operating syst
 const channels = 1                               // 1 - mono, 2 - stereo
 const volume = 0.2                               // shared by all oscillators, so only the waveform changes
 const baseFrequency = 440                        // shared by all oscillators, so only the waveform changes
-const switchInterval = 4 * time.Second           // how long each oscillator plays before switching to the next one
+const pulseWidth = 0.2                           // part of the period the pulse wave is high (0.5 would be a square)
+const switchInterval = 2 * time.Second           // how long each oscillator plays before switching to the next one
 
 func main() {
 	sineOscillator, err := oscillator.NewSine(volume, baseFrequency, samplingRate)
@@ -23,6 +24,10 @@ func main() {
 	squareOscillator, err := oscillator.NewSquare(volume, baseFrequency, samplingRate)
 	if err != nil {
 		panic("Error creating square oscillator: " + err.Error())
+	}
+	pulseOscillator, err := oscillator.NewPulse(volume, baseFrequency, samplingRate, pulseWidth)
+	if err != nil {
+		panic("Error creating pulse oscillator: " + err.Error())
 	}
 
 	ctxOptions := &oto.NewContextOptions{}
@@ -38,7 +43,7 @@ func main() {
 	// Wait for the hardware to be ready
 	<-readyChan
 
-	players := []*oto.Player{otoCtx.NewPlayer(sineOscillator), otoCtx.NewPlayer(squareOscillator)}
+	players := []*oto.Player{otoCtx.NewPlayer(sineOscillator), otoCtx.NewPlayer(squareOscillator), otoCtx.NewPlayer(pulseOscillator)}
 	for _, player := range players {
 		player.SetBufferSize(bufferSizeSamples)
 	}
